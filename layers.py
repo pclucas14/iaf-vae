@@ -7,62 +7,6 @@ import torch.distributions as D
 
 # Basic Layers 
 # -------------------------------------------------------------------------------------------------------
-def get_linear_ar_mask(n_in, n_out, zerodiagonal=False):
-    assert n_in % n_out == 0 or n_out % n_in == 0, "%d - %d" % (n_in, n_out)
-
-    mask = np.ones([n_in, n_out], dtype=np.float32)
-    if n_out >= n_in:
-        k = n_out // n_in
-        for i in range(n_in):
-            mask[i + 1:, i * k:(i + 1) * k] = 0
-            if zerodiagonal:
-                mask[i:i + 1, i * k:(i + 1) * k] = 0
-    else:
-        k = n_in // n_out
-        for i in range(n_out):
-            mask[(i + 1) * k:, i:i + 1] = 0
-            if zerodiagonal:
-                mask[i * k:(i + 1) * k:, i:i + 1] = 0
-    return mask
-
-
-def get_conv_ar_mask(h, w, n_in, n_out, zerodiagonal=False):
-    l = (h - 1) // 2
-    m = (w - 1) // 2
-    mask = np.ones([h, w, n_in, n_out], dtype=np.float32)
-    mask[:l, :, :, :] = 0
-    mask[l, :m, :, :] = 0
-    mask[l, m, :, :] = get_linear_ar_mask(n_in, n_out, zerodiagonal)
-    return mask
-
-class ARConv2d(nn.Conv2d):
-    def __init__(self, zerodiagonal, *args, **kwargs):
-        super(ARConv2d, self).__init__(*args, **kwargs)
-        
-        # TODO: figure out how to set up mask
-        if type(args[2]) == int:
-            h, w = args[2], args[2]
-        else:
-            h, w = args[2][0], args[2][1]
-
-        mask = get_conv_ar_mask(h, w, args[0], args[1])
-        mask = mask.transpose(-1, -2, 0, 1)
-        
-        self.register_buffer('mask', torch.from_numpy(mask).float())
-        self.register_buffer('mask_', self.weight.data.clone())
-
-        mask_type = 'B'
-        _, _, kH, kW = self.weight.size()
-        self.mask_.fill_(1)
-        self.mask_[:, :, kH // 2, kW // 2 + (mask_type == 'B'):] = 0
-        self.mask_[:, :, kH // 2 + 1:] = 0
-        
-
-    def forward(self, x):
-        self.weight.data *= self.mask
-        return super(ARConv2d, self).forward(x)
-
-
 class MaskedConv2d(nn.Conv2d):
     def __init__(self, mask_type, *args, **kwargs):
         super(MaskedConv2d, self).__init__(*args, **kwargs)
