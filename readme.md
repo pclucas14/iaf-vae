@@ -4,7 +4,7 @@ A Pytorch implementation of [this paper](https://arxiv.org/abs/1606.04934)
 
 Main work taken from the [official implementation](https://github.com/openai/iaf)
 
-Running the following command gets <3.8 BPD (which is still some ways from the 3.17 in the original paper)
+Running the following command gets <3.8 BPD (which is still some ways from the 3.11 in the original paper)
 
 ```
 python main.py --batch_size 128 --depth 1 --n_blocks 20 --free_bits 0.128 --lr 0.002 --z_size 32 --h_size 160 --iaf 1
