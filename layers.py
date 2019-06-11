@@ -29,10 +29,8 @@ class ARMultiConv2d(nn.Module):
         convs, out_convs = [], []
 
         for i, size in enumerate(n_h):
-            # convs += [wn(ARConv2d(False, args.z_size if i == 0 else args.h_size, args.h_size, 3, 1, 1))]
-            convs += [MaskedConv2d('A' if i == 0 else 'B', args.z_size if i == 0 else args.h_size, args.h_size, 3, 1, 1)]
+            convs     += [MaskedConv2d('A' if i == 0 else 'B', args.z_size if i == 0 else args.h_size, args.h_size, 3, 1, 1)]
         for i, size in enumerate(n_out):
-            # out_convs += [wn(ARConv2d(True, args.h_size, args.z_size, 3, 1, 1))]
             out_convs += [MaskedConv2d('B', args.h_size, args.z_size, 3, 1, 1)]
 
         self.convs = nn.ModuleList(convs)
@@ -125,10 +123,6 @@ class IAFLayer(nn.Module):
             logps = prior.log_prob(z) 
             kl = logqs - logps
 
-            if kl.mean() < -0.1:
-                import pdb; pdb.set_trace()
-                xx = 1
-            
             # free bits (doing as in the original repo, even if weird)
             kl_obj = kl.sum(dim=(-2, -1)).mean(dim=0, keepdim=True)
             kl_obj = kl_obj.clamp(min=self.args.free_bits)

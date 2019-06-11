@@ -96,7 +96,7 @@ args = parser.parse_args()
 model = VAE(args).cuda()
 print(model)
 
-optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+optimizer = torch.optim.Adamax(model.parameters(), lr=args.lr)
 
 # create datasets / dataloaders
 scale_inv = lambda x : x + 0.5
@@ -121,11 +121,12 @@ for epoch in range(args.n_epochs):
         x, kl, kl_obj = model(input)
 
         log_pxz = discretized_logistic(x, model.dec_log_stdv, sample=input)
-        loss = (kl_obj - log_pxz).sum()
+        loss = ((kl_obj - log_pxz) / x.size(0)).sum()
         elbo = (kl     - log_pxz).sum()
-        
+      
+        # print('kl : {:.4f}\tkl obj : {:.4f}\tpx : {:.4f}'.format(kl.sum(), kl_obj.sum(), log_pxz.sum()))
         optimizer.zero_grad()
-        (loss / input.size(0)).backward()
+        loss.backward()
         optimizer.step()
         
         train_loss += loss.item()
