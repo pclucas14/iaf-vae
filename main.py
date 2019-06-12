@@ -106,7 +106,7 @@ torch.manual_seed(0)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-optimizer = torch.optim.Adamax(model.parameters(), lr=args.lr)
+opt = torch.optim.Adamax(model.parameters(), lr=args.lr)
 
 # create datasets / dataloaders
 scale_inv = lambda x : x + 0.5
@@ -151,9 +151,9 @@ for epoch in range(args.n_epochs):
         elbo = (kl     - log_pxz)
         bpd  = elbo / (32 * 32 * 3 * np.log(2.))
      
-        optimizer.zero_grad()
+        opt.zero_grad()
         loss.backward()
-        optimizer.step()
+        opt.step()
 
         train_log['kl']         += [kl.mean()]
         train_log['bpd']        += [bpd.mean()]
@@ -162,7 +162,7 @@ for epoch in range(args.n_epochs):
         train_log['log p(x|z)'] += [log_pxz.mean()]
 
     for key, value in train_log.items():
-        print_and_log_scalar(writer, 'train/%s' % key, value, 0)
+        print_and_log_scalar(writer, 'train/%s' % key, value, epoch)
     print()
     
     model.eval()
@@ -194,5 +194,5 @@ for epoch in range(args.n_epochs):
         save_image(scale_inv(model.sample(64)), join(sample_dir, 'sample_{}.png'.format(epoch)), nrow=8)
 
     for key, value in test_log.items():
-        print_and_log_scalar(writer, 'test/%s' % key, value, 0)
+        print_and_log_scalar(writer, 'test/%s' % key, value, epoch)
     print()
