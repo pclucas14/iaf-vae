@@ -14,9 +14,9 @@ python main.py --batch_size 128 --depth 1 --n_blocks 20 --free_bits 0.128 --lr 0
 Here are some test set reconstructions, and samples 
 <p align="center">
 <img src="https://github.com/pclucas14/iaf-vae/blob/master/images/test_99.png">
-<img src="https://github.com/pclucas14/iaf-vae/blob/master/images/samples_99.png">
+<img src="https://github.com/pclucas14/iaf-vae/blob/master/images/samples_204.png">
 </p>
-Judging by how good the reconstructions are, and how bad the samples are, maybe the free bits constraint is too loose. More investigation required.
+Judging by how good the reconstructions are,  maybe the free bits constraint is too loose. More investigation required.
 
 ### Contribute
 I'm having trouble closing the performance gap with the offical code, as Conda does not support anymore the required tensorflow version to run it. Therefore, all contributions / comments / remarks are highly welcomed. 
