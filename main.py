@@ -1,11 +1,14 @@
-import time
 import torch
 import argparse
 import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision import datasets, transforms, utils
+
+from os.path import join
+from tensorboardX import SummaryWriter
 from torchvision.utils import save_image
+from collections import OrderedDict as OD 
+from torchvision import datasets, transforms, utils
 
 from layers import IAFLayer
 from utils  import * 
@@ -80,6 +83,7 @@ class VAE(nn.Module):
 
 # arguments
 parser = argparse.ArgumentParser()
+parser.add_argument('--debug', action='store_true')
 parser.add_argument('--n_blocks', type=int, default=20)
 parser.add_argument('--depth', type=int, default=1)
 parser.add_argument('--z_size', type=int, default=32)
@@ -96,6 +100,12 @@ args = parser.parse_args()
 model = VAE(args).cuda()
 print(model)
 
+# reproducibility is da best
+np.random.seed(0)
+torch.manual_seed(0)
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+
 optimizer = torch.optim.Adamax(model.parameters(), lr=args.lr)
 
 # create datasets / dataloaders
@@ -107,76 +117,82 @@ train_loader = torch.utils.data.DataLoader(datasets.CIFAR10('../cl-pytorch/data'
     download=True, transform=ds_transforms), batch_size=args.batch_size, shuffle=True, **kwargs)
 
 test_loader  = torch.utils.data.DataLoader(datasets.CIFAR10('../cl-pytorch/data', train=False, 
-                transform=ds_transforms), batch_size=args.batch_size, shuffle=True, **kwargs)
+    download=True, transform=ds_transforms), batch_size=args.batch_size, shuffle=True, **kwargs)
+
+# create logging containers
+def reset_log():
+    logs = OD()
+    for name in ['log p(x|z)', 'kl obj', 'kl', 'elbo', 'bpd']:
+        logs[name] = []
+    return logs
+
+# spawn writer
+model_name = 'NB{}_D{}_Z{}_H{}_BS{}_FB{}_LR{}_IAF{}'.format(args.n_blocks, args.depth, args.z_size, args.h_size, 
+                                                            args.batch_size, args.free_bits, args.lr, args.iaf)
+model_name = 'test' if args.debug else model_name
+log_dir    = join('runs', model_name)
+sample_dir = join(log_dir, 'samples')
+writer     = SummaryWriter(log_dir=log_dir)
+maybe_create_dir(sample_dir)
+
 
 print('starting training')
 for epoch in range(args.n_epochs):
     model.train()
-    train_loss, train_re, train_kl = 0., 0., 0.
-    time_ = time.time()
+    train_log = reset_log()
 
     for batch_idx, (input,_) in enumerate(train_loader):
-       
+
         input = input.cuda()
         x, kl, kl_obj = model(input)
 
         log_pxz = discretized_logistic(x, model.dec_log_stdv, sample=input)
-        loss = ((kl_obj - log_pxz) / x.size(0)).sum()
-        elbo = (kl     - log_pxz).sum()
-      
-        # print('kl : {:.4f}\tkl obj : {:.4f}\tpx : {:.4f}'.format(kl.sum(), kl_obj.sum(), log_pxz.sum()))
+        loss = (kl_obj - log_pxz).sum() / x.size(0)
+        elbo = (kl     - log_pxz)
+        bpd  = elbo / (32 * 32 * 3 * np.log(2.))
+     
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        
-        train_loss += loss.item()
-        train_re   += -log_pxz.sum().item()
-        train_kl   += kl.sum().item()
 
-        if batch_idx % 50 == 49 : 
-            deno = 50 * args.batch_size * 32 * 32 * 3 * np.log(2.)
-            print('train loss : {:.4f}\t recon: {:.4f}\t kl : {:.4f}\t elbo : {:.4f}\t time : {:.4f}'.format(
-                (train_loss / (50 * args.batch_size)), 
-                (train_re) / (50 * args.batch_size),
-                (train_kl / (50 * args.batch_size)),
-                (train_re + train_kl) / deno,
-                (time.time() - time_)))
-           
-            # break
-            train_loss, train_re, train_kl = 0., 0., 0.
-            time_ = time.time()
+        train_log['kl']         += [kl.mean()]
+        train_log['bpd']        += [bpd.mean()]
+        train_log['elbo']       += [elbo.mean()]
+        train_log['kl obj']     += [kl_obj.mean()]
+        train_log['log p(x|z)'] += [log_pxz.mean()]
+
+    for key, value in train_log.items():
+        print_and_log_scalar(writer, 'train/%s' % key, value, 0)
+    print()
     
     model.eval()
-    test_loss, test_re, test_kl = 0., 0., 0.
+    test_log = reset_log()
 
-    print('test time!')
-    time_ = time.time()
     with torch.no_grad():
         for batch_idx, (input,_) in enumerate(test_loader):
             input = input.cuda()
             x, kl, kl_obj = model(input)
+            if batch_idx > 10: break
         
             log_pxz = discretized_logistic(x, model.dec_log_stdv, sample=input)
-            loss = (kl_obj - log_pxz).sum()
-            elbo = (kl     - log_pxz).sum()
+            loss = (kl_obj - log_pxz).sum() / x.size(0)
+            elbo = (kl     - log_pxz)
+            bpd  = elbo / (32 * 32 * 3 * np.log(2.))
             
-            test_loss += loss.item()
-            test_re   += -log_pxz.sum().item()
-            test_kl   += kl.sum().item()
-
-        out = torch.stack((x, input)) # 2, bs, 3, 32, 32
-        out = out.transpose(1,0).contiguous() # bs, 2, 3, 32, 32
+            test_log['kl']         += [kl.mean()]
+            test_log['bpd']        += [bpd.mean()]
+            test_log['elbo']       += [elbo.mean()]
+            test_log['kl obj']     += [kl_obj.mean()]
+            test_log['log p(x|z)'] += [log_pxz.mean()]
+            
+        # save reconstructions
+        out = torch.stack((x, input))               # 2, bs, 3, 32, 32
+        out = out.transpose(1,0).contiguous()       # bs, 2, 3, 32, 32
         out = out.view(-1, x.size(-3), x.size(-2), x.size(-1))
         
-        save_image(scale_inv(out), 'samples/test_recon_{}.png'.format(epoch), nrow=12)
-        save_image(scale_inv(model.sample(64)), 'samples/sample_{}.png'.format(epoch), nrow=8)
+        save_image(scale_inv(out), join(sample_dir, 'test_recon_{}.png'.format(epoch)), nrow=12)
+        save_image(scale_inv(model.sample(64)), join(sample_dir, 'sample_{}.png'.format(epoch)), nrow=8)
 
-        deno = batch_idx * args.batch_size * 32 * 32 * 3 * np.log(2.)
-        print('test loss : {:.4f}\t recon: {:.4f}\t kl : {:.4f}\t elbo : {:.4f}\t time : {:.4f}'.format(
-            (test_loss / (batch_idx * args.batch_size)), 
-            (test_re) / (batch_idx * args.batch_size),
-            (test_kl / (batch_idx * args.batch_size)),
-            (test_re + test_kl) / deno,
-            (time.time() - time_)))
-        
-
+    for key, value in test_log.items():
+        print_and_log_scalar(writer, 'test/%s' % key, value, 0)
+    print()
