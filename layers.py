@@ -7,6 +7,8 @@ import torch.distributions as D
 
 # Basic Layers 
 # -------------------------------------------------------------------------------------------------------
+
+# taken from https://github.com/jzbontar/pixelcnn-pytorch
 class MaskedConv2d(nn.Conv2d):
     def __init__(self, mask_type, *args, **kwargs):
         super(MaskedConv2d, self).__init__(*args, **kwargs)
