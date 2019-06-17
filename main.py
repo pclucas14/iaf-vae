@@ -172,7 +172,6 @@ for epoch in range(args.n_epochs):
         for batch_idx, (input,_) in enumerate(test_loader):
             input = input.cuda()
             x, kl, kl_obj = model(input)
-            if batch_idx > 10: break
         
             log_pxz = discretized_logistic(x, model.dec_log_stdv, sample=input)
             loss = (kl_obj - log_pxz).sum() / x.size(0)
