@@ -14,7 +14,7 @@ python main.py --batch_size 128 --depth 1 --n_blocks 20 --free_bits 0.001 --lr 0
 Here are some test set reconstructions, and samples 
 <p align="center">
 <img src="https://github.com/pclucas14/iaf-vae/blob/master/images/test_99.png">
-<img src="https://github.com/pclucas14/iaf-vae/blob/master/images/samples_204.png">
+<img src="https://github.com/pclucas14/iaf-vae/blob/master/images/sample_999.png">
 </p>
 Judging by how good the reconstructions are,  maybe the free bits constraint is too loose. More investigation required.
 
