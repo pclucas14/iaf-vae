@@ -10,6 +10,12 @@ Running the following command gets ~ 3.35 BPD (which is still some ways from the
 python main.py --batch_size 128 --depth 1 --n_blocks 20 --free_bits 0.001 --lr 0.002 --z_size 32 --h_size 160 --iaf 1
 ```
 
+As comparison, the baseline (IAF disabled) gets ~ 3.6 BPD. You can test with the following command 
+```
+python main.py --batch_size 128 --depth 1 --n_blocks 20 --free_bits 0.001 --lr 0.002 --z_size 32 --h_size 160 --iaf 0
+```
+
+
 ### Images
 Here are some test set reconstructions, and samples 
 <p align="center">
