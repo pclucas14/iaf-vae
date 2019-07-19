@@ -161,8 +161,6 @@ if __name__ == '__main__':
     model_name = 'NB{}_D{}_Z{}_H{}_BS{}_FB{}_LR{}_IAF{}'.format(args.n_blocks, args.depth, args.z_size, args.h_size, 
                                                                 args.batch_size, args.free_bits, args.lr, args.iaf)
 
-    import pdb; pdb.set_trace()
-
     model_name = 'test' if args.debug else model_name
     log_dir    = join('runs', model_name)
     sample_dir = join(log_dir, 'samples')
