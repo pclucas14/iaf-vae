@@ -142,10 +142,7 @@ model = VAE(args).cuda()
 print(model)
 
 # reproducibility is da best
-np.random.seed(0)
-torch.manual_seed(0)
-torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark = False
+set_seed(0)
 
 opt = torch.optim.Adamax(model.parameters(), lr=args.lr)
 
@@ -160,13 +157,6 @@ train_loader = torch.utils.data.DataLoader(datasets.CIFAR10('../cl-pytorch/data'
 test_loader  = torch.utils.data.DataLoader(datasets.CIFAR10('../cl-pytorch/data', train=False, 
     download=True, transform=ds_transforms), batch_size=args.batch_size, shuffle=True, **kwargs)
 
-# create logging containers
-def reset_log():
-    logs = OD()
-    for name in ['log p(x|z)', 'kl obj', 'kl', 'elbo', 'bpd']:
-        logs[name] = []
-    return logs
-
 # spawn writer
 model_name = 'NB{}_D{}_Z{}_H{}_BS{}_FB{}_LR{}_IAF{}'.format(args.n_blocks, args.depth, args.z_size, args.h_size, 
                                                             args.batch_size, args.free_bits, args.lr, args.iaf)
@@ -175,6 +165,11 @@ log_dir    = join('runs', model_name)
 sample_dir = join(log_dir, 'samples')
 writer     = SummaryWriter(log_dir=log_dir)
 maybe_create_dir(sample_dir)
+
+print_and_save_args(args, log_dir)
+print('logging into %s' % log_dir)
+maybe_create_dir(sample_dir)
+best_test = float('inf')
 
 
 print('starting training')
@@ -187,7 +182,7 @@ for epoch in range(args.n_epochs):
         input = input.cuda()
         x, kl, kl_obj = model(input)
 
-        log_pxz = discretized_logistic(x, model.dec_log_stdv, sample=input)
+        log_pxz = logistic_ll(x, model.dec_log_stdv, sample=input)
         loss = (kl_obj - log_pxz).sum() / x.size(0)
         elbo = (kl     - log_pxz)
         bpd  = elbo / (32 * 32 * 3 * np.log(2.))
@@ -214,7 +209,7 @@ for epoch in range(args.n_epochs):
             input = input.cuda()
             x, kl, kl_obj = model(input)
         
-            log_pxz = discretized_logistic(x, model.dec_log_stdv, sample=input)
+            log_pxz = logistic_ll(x, model.dec_log_stdv, sample=input)
             loss = (kl_obj - log_pxz).sum() / x.size(0)
             elbo = (kl     - log_pxz)
             bpd  = elbo / (32 * 32 * 3 * np.log(2.))
@@ -245,3 +240,9 @@ for epoch in range(args.n_epochs):
     for key, value in test_log.items():
         print_and_log_scalar(writer, 'test/%s' % key, value, epoch)
     print()
+    
+    current_test = sum(test_log['bpd']) / batch_idx
+    if current_test < best_test:
+        best_test = current_test
+        print('saving best model')
+        torch.save(model.state_dict(), join(log_dir, 'best_model.pth'))
