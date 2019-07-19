@@ -24,9 +24,9 @@ def load_model_from_file(path):
     with open(os.path.join(path, 'args.json'), 'rb') as f:
         args = dotdict(json.load(f))
 
-    from vqvae import VQVAE    
     # create model
-    model = VQVAE(args)
+    from main import VAE
+    model = VAE(args)
 
     # load weights
     model.load_state_dict(torch.load(os.path.join(path, 'best_model.pth')))
