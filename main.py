@@ -77,6 +77,47 @@ class VAE(nn.Module):
         x = self.last_conv(x)
         
         return x.clamp(min=-0.5 + 1. / 512., max=0.5 - 1. / 512.)
+    
+    
+    def cond_sample(self, input):
+        # assumes input is \in [-0.5, 0.5] 
+        x = self.first_conv(input)
+        kl, kl_obj = 0., 0.
+
+        h = self.h.view(1, -1, 1, 1)
+
+        for layer in self.layers:
+            for sub_layer in layer:
+                x = sub_layer.up(x)
+
+        h = h.expand_as(x)
+        self.hid_shape = x[0].size()
+
+        outs = []
+
+        current = 0
+        for i, layer in enumerate(reversed(self.layers)):
+            for j, sub_layer in enumerate(reversed(layer)):
+                h, curr_kl, curr_kl_obj = sub_layer.down(h)
+                
+                h_copy = h
+                again = 0
+                # now, sample the rest of the way:
+                for layer_ in reversed(self.layers):
+                    for sub_layer_ in reversed(layer_):
+                        if again > current:
+                            h_copy, _, _ = sub_layer_.down(h_copy, sample=True)
+                        
+                        again += 1
+                        
+                x = F.elu(h_copy)
+                x = self.last_conv(x)
+                x = x.clamp(min=-0.5 + 1. / 512., max=0.5 - 1. / 512.)
+                outs += [x]
+
+                current += 1
+
+        return outs
         
 # Main
 # ----------------------------------------------------------------------------------------------
@@ -84,8 +125,8 @@ class VAE(nn.Module):
 # arguments
 parser = argparse.ArgumentParser()
 parser.add_argument('--debug', action='store_true')
-parser.add_argument('--n_blocks', type=int, default=20)
-parser.add_argument('--depth', type=int, default=1)
+parser.add_argument('--n_blocks', type=int, default=4)
+parser.add_argument('--depth', type=int, default=2)
 parser.add_argument('--z_size', type=int, default=32)
 parser.add_argument('--h_size', type=int, default=64)
 parser.add_argument('--n_epochs', type=int, default=1000)
@@ -184,13 +225,22 @@ for epoch in range(args.n_epochs):
             test_log['kl obj']     += [kl_obj.mean()]
             test_log['log p(x|z)'] += [log_pxz.mean()]
             
+        all_samples = model.cond_sample(input)
         # save reconstructions
         out = torch.stack((x, input))               # 2, bs, 3, 32, 32
         out = out.transpose(1,0).contiguous()       # bs, 2, 3, 32, 32
         out = out.view(-1, x.size(-3), x.size(-2), x.size(-1))
-        
+       
+        all_samples += [x]
+        all_samples = torch.stack(all_samples)     # L, bs, 3, 32, 32
+        all_samples = all_samples.transpose(1,0)
+        all_samples = all_samples.contiguous()     # bs, L, 3, 32, 32
+        all_samples = all_samples.view(-1, x.size(-3), x.size(-2), x.size(-1))
+
+        save_image(scale_inv(all_samples), join(sample_dir, 'test_levels_{}.png'.format(epoch)), nrow=12)
         save_image(scale_inv(out), join(sample_dir, 'test_recon_{}.png'.format(epoch)), nrow=12)
         save_image(scale_inv(model.sample(64)), join(sample_dir, 'sample_{}.png'.format(epoch)), nrow=8)
+        
 
     for key, value in test_log.items():
         print_and_log_scalar(writer, 'test/%s' % key, value, epoch)
